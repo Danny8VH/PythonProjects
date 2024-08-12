@@ -1,0 +1,124 @@
+import pandas as pd
+from selenium import webdriver
+from selenium.webdriver.chrome.service import Service as ChromeService
+from selenium.webdriver.chrome.options import Options
+from bs4 import BeautifulSoup
+from time import sleep
+import datetime
+from datetime import date
+import re
+
+CHROMEDRIVER_PATH= r'Ruta\chromedriver-win64\chromedriver-win64\chromedriver.exe'
+chrome_binary_path=  r'Ruta\chrome-win64\chrome-win64\chrome.exe'
+
+
+#options = webdriver.ChromeOptions()
+chrome_options = Options()
+chrome_options.binary_location = chrome_binary_path
+service = ChromeService(executable_path=CHROMEDRIVER_PATH)
+driver = webdriver.Chrome(service=service,options=chrome_options)
+
+pagination_url = 'https://www.carulla.com/whisky?_q=whisky&map=ft'
+#options.add_argument("--headless=new")
+
+driver.get(pagination_url)
+
+#Obteniendo mostrar paginas
+while True:
+    try:
+        load = driver.find_element('xpath',"//button[.//div[text()='Mostrar más'] and not(@disabled)]")
+        driver.execute_script("arguments[0].click();", load)
+        print("Show more button clicked")
+        sleep(5)
+    except :
+        break
+    
+#Top of page
+t=10
+while t:
+    
+#if you want to scroll some level up, use this,again i used here "-500" you may vary 
+#according to your use 
+    driver.execute_script("scrollBy(0,-1500);")
+    sleep(3)
+    t=t-1       # it`s a part of the loop
+    
+    
+    
+#Bajar Again
+last_height = driver.execute_script("return document.body.scrollHeight")
+    #timing del bot
+while True:
+    driver.execute_script("window.scrollTo (0, document.body.scrollHeight);")
+
+    sleep(1)
+
+    new_height = driver.execute_script("return document.body.scrollHeight")
+    if new_height == last_height:
+      break
+    last_height = new_height
+    
+    
+#Top of page
+t=10
+while t:
+    
+#if you want to scroll some level up, use this,again i used here "-500" you may vary 
+#according to your use 
+    driver.execute_script("scrollBy(0,-1500);")
+    sleep(3)
+    t=t-1       # it`s a part of the loop
+    
+    
+#Recuperando Grilla
+soup = BeautifulSoup(driver.page_source, 'html.parser')
+all_items = soup.find_all('section', {'class': 'vtex-product-summary-2-x-container vtex-product-summary-2-x-container--productDefaultDescription vtex-product-summary-2-x-containerNormal vtex-product-summary-2-x-containerNormal--productDefaultDescription overflow-hidden br3 h-100 w-100 flex flex-column justify-between center tc'})    
+#Largo del arreglo
+len(all_items)
+
+product_list=[] 
+for item in all_items:
+    
+    elements = item.find('a')
+    # Crea una lista para almacenar los valores de href
+    href_values = elements.get('href')
+    cadena = ''.join(href_values)
+    descuento = item.find('div', {'class':'exito-vtex-components-4-x-list-price t-mini ttn strike'})
+    #Limpiar corchetes del archivo
+    titles = item.find('div', {'class':'vtex-product-summary-2-x-productBrandContainer'})
+    title= titles.get_text(strip=True).replace('[', '').replace(']', '') if titles else None
+    skus= item.find('span', {'class':'vtex-store-components-3-x-productBrand'})
+    sku= skus.get_text(strip=True).replace('[', '').replace(']', '') if titles else None
+    # Extraer el número que precede a "ml"
+    ml_match = re.search(r'(\d+)\s*ml',sku)
+    ml_value = ml_match.group(1) if ml_match else None
+    
+    if descuento is not None:
+        descuento = item.find('div', {'class':'exito-vtex-components-4-x-badgeDiscount flex items-center'})
+    product ={
+        'date': datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        'Familia': title,
+        'sku':sku,
+        'descuento': descuento,
+        'price': item.find('div', {'class':'exito-vtex-components-4-x-PricePDP'}).text.split('$\xa0',1)[1],
+        'ML':ml_value,
+        'href_values':'https://www.carulla.com'+cadena,
+        #'price': item.find('span', {'class':'exito-vtex-components-4-x-currencyContainer'}).text.split('$\xa0',1)[1],
+        'source':'Carulla'
+    }
+#vtex-store-components-3-x-productBrand 
+    product_list.append(product)
+
+product_list
+
+pd.set_option('display.max_columns', None)
+df= pd.DataFrame(product_list)
+df
+
+# Obtiene la fecha de hoy
+hoy = date.today()
+
+# Formatea la fecha en el formato que deseas
+nombre_archivo = hoy.strftime("%d-%m-%Y") + "-Carulla.xlsx"
+# Guarda el DataFrame en un archivo de Excel
+df.to_excel(f'Ruta\\{nombre_archivo}')
